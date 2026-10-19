@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cache-demo
+---
+# 1. Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: cache-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - containerPort: 6379
+---
+# 2. Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: cache-demo
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+---
+# 3. Web App Deployment (Single replica to avoid npm lock collisions)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: cache-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+      - name: web-app
+        image: node:18-alpine
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        # Installs packages locally inside a container-writable directory safely on start
+        command: ["sh", "-c", "cd /tmp && npm init -y && npm install express redis && node -e \"$(cat /app/server.js)\""]
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+        ports:
+        - containerPort: 3000
+      volumes:
+      - name: app-code
+        configMap:
+          name: web-app-source
+---
+# 4. Web App Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+  namespace: cache-demo
+spec:
+  type: NodePort
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30080
+  selector:
+    app: web-app
+---
+# 5. ConfigMap with your server logic
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-app-source
+  namespace: cache-demo
+data:
+  server.js: |
+    const express = require('express');
+    const { createClient } = require('redis');
+
+    const app = express();
+    const port = 3000;
+
+    const redisClient = createClient({
+      url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`
+    });
+
+    redisClient.on('error', (err) => console.error('Redis Client Error', err));
+
+    async function startServer() {
+      await redisClient.connect();
+      console.log('Connected to Redis Cache');
+
+      app.get('/', async (req, res) => {
+        const cacheKey = 'rendered_content_page';
+        
+        try {
+          const cachedData = await redisClient.get(cacheKey);
+          
+          if (cachedData) {
+            return res.send(`[CACHE HIT 🚀] ${cachedData}`);
+          }
+
+          const freshData = `Rendered page generated at ${new Date().toISOString()} (Heavy Computation)`;
+          await redisClient.setEx(cacheKey, 30, freshData);
+
+          res.send(`[CACHE MISS 🔄] ${freshData}`);
+        } catch (error) {
+          console.error(error);
+          res.status(500).send('Internal Server Error');
+        }
+      });
+
+      app.listen(port, () => {
+        console.log(`Web app listening on port ${port}`);
+      });
+    }
+
+    startServer();
