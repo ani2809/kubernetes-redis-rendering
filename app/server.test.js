@@ -36,14 +36,19 @@ test('returns a cache miss, stores the value with the configured TTL, then retur
   const missBody = await missResponse.text();
 
   assert.equal(missResponse.status, 200);
-  assert.match(missBody, /^\[CACHE MISS\] Rendered page generated at /);
-  assert.equal(redisClient.lastSet.key, 'rendered_content_page');
+  assert.match(missBody, /^Hello from Kubernetes Redis Rendering!/);
+  assert.match(missBody, /This text is served by the web app and cached in Redis\./);
+  assert.match(missResponse.headers.get('content-type'), /^text\/plain; charset=utf-8/);
+  assert.equal(missResponse.headers.get('x-cache'), 'MISS');
+  assert.equal(redisClient.lastSet.key, 'text_file_content');
   assert.equal(redisClient.lastSet.ttl, 45);
+  assert.equal(redisClient.lastSet.value, missBody);
 
   const hitResponse = await fetch(baseUrl);
   const hitBody = await hitResponse.text();
   assert.equal(hitResponse.status, 200);
-  assert.equal(hitBody, missBody.replace('[CACHE MISS]', '[CACHE HIT]'));
+  assert.equal(hitBody, missBody);
+  assert.equal(hitResponse.headers.get('x-cache'), 'HIT');
 });
 
 test('health endpoint is live and readiness follows Redis state', async () => {
@@ -64,6 +69,26 @@ test('returns an internal server error when Redis fails', async (t) => {
   const response = await fetch(baseUrl);
   assert.equal(response.status, 500);
   assert.equal(await response.text(), 'Internal Server Error');
+});
+
+test('returns an internal server error when the text file cannot be read', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const missingFileRedis = createRedisStub();
+
+  const app = createApp(missingFileRedis, 45, '/missing/content.txt');
+  const fileServer = createServer(app);
+  await new Promise((resolve) => fileServer.listen(0, '127.0.0.1', resolve));
+  const fileUrl = `http://127.0.0.1:${fileServer.address().port}`;
+
+  try {
+    const response = await fetch(fileUrl);
+    assert.equal(response.status, 500);
+    assert.equal(await response.text(), 'Internal Server Error');
+  } finally {
+    await new Promise((resolve, reject) => {
+      fileServer.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
 });
 
 test('rejects invalid cache TTL values', () => {

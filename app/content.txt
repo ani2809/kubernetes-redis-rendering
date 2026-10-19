@@ -1,0 +1,4 @@
+Hello from Kubernetes Redis Rendering!
+
+This text is served by the web app and cached in Redis.
+Edit app/content.txt, build a new image, and redeploy to update it.

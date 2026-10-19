@@ -1,7 +1,10 @@
 const express = require('express');
 const { createClient } = require('redis');
+const { readFile } = require('node:fs/promises');
+const path = require('node:path');
 
-const CACHE_KEY = 'rendered_content_page';
+const CACHE_KEY = 'text_file_content';
+const CONTENT_FILE = path.join(__dirname, 'content.txt');
 const DEFAULT_CACHE_TTL_SECONDS = 30;
 const REDIS_RETRY_DELAY_MS = 1000;
 
@@ -18,7 +21,11 @@ function readCacheTtlSeconds(value = process.env.CACHE_TTL_SECONDS) {
   return ttl;
 }
 
-function createApp(redisClient, cacheTtlSeconds = readCacheTtlSeconds()) {
+function createApp(
+  redisClient,
+  cacheTtlSeconds = readCacheTtlSeconds(),
+  contentFile = CONTENT_FILE,
+) {
   const app = express();
 
   app.get('/healthz', (_req, res) => {
@@ -36,15 +43,15 @@ function createApp(redisClient, cacheTtlSeconds = readCacheTtlSeconds()) {
   app.get('/', async (_req, res) => {
     try {
       const cachedData = await redisClient.get(CACHE_KEY);
-      if (cachedData) {
-        return res.send(`[CACHE HIT] ${cachedData}`);
+      if (cachedData !== null) {
+        return res.type('text/plain').set('X-Cache', 'HIT').send(cachedData);
       }
 
-      const freshData = `Rendered page generated at ${new Date().toISOString()} (Heavy Computation)`;
-      await redisClient.setEx(CACHE_KEY, cacheTtlSeconds, freshData);
-      return res.send(`[CACHE MISS] ${freshData}`);
+      const fileContents = await readFile(contentFile, 'utf8');
+      await redisClient.setEx(CACHE_KEY, cacheTtlSeconds, fileContents);
+      return res.type('text/plain').set('X-Cache', 'MISS').send(fileContents);
     } catch (error) {
-      console.error('Failed to render page using Redis cache', error);
+      console.error('Failed to read or cache text file', error);
       return res.status(500).send('Internal Server Error');
     }
   });

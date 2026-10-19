@@ -24,16 +24,18 @@ kubectl rollout status deployment/web-app -n cache-demo
 kubectl port-forward service/web-app-service 3000:3000 -n cache-demo
 ```
 
-Open <http://localhost:3000>. The first request is a cache miss; subsequent
-requests within the 30-second TTL are cache hits. `/healthz` is the liveness
-endpoint, and `/readyz` reports whether Redis is connected.
+Open <http://localhost:3000> to see the contents of `app/content.txt` as plain
+text. The `X-Cache` response header shows `MISS` on the first request and `HIT`
+on subsequent requests within the 30-second TTL. Edit `app/content.txt`, then
+build a new image and redeploy to publish updated text. `/healthz` is the
+liveness endpoint, and `/readyz` reports whether Redis is connected.
 
 ## Container images
 
 GitHub Actions runs app tests, parses the Kubernetes YAML, and builds the image
 on pull requests. Pushes to `main` publish `latest`, `main`, and a commit-SHA
 tag to GitHub Container Registry (GHCR). Pushing a semantic version tag such
-as `v1.0.1` also publishes the matching version tag, which the Kubernetes
+as `v1.0.2` also publishes the matching version tag, which the Kubernetes
 manifest uses. Published images include both AMD64 and ARM64 variants.
 
 The GHCR package is public, so Kubernetes can pull it without credentials. If
@@ -42,8 +44,8 @@ you make it private, configure an `imagePullSecret` before deploying.
 To publish a release image after merging changes:
 
 ```sh
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 Update the image tag in `k8s-manifests.yaml` to the new version before

@@ -6,7 +6,7 @@ WORKDIR /app
 COPY app/package.json app/package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY --chown=node:node app/server.js ./server.js
+COPY --chown=node:node app/server.js app/content.txt ./
 
 USER node
 EXPOSE 3000
