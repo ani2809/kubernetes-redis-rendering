@@ -87,7 +87,7 @@ spec:
       terminationGracePeriodSeconds: 15
       containers:
         - name: web-app
-          image: ghcr.io/ani2809/kubernetes-redis-rendering:1.0.2
+          image: ghcr.io/ani2809/kubernetes-redis-rendering:1.0.3
           imagePullPolicy: IfNotPresent
           env:
             - name: REDIS_HOST
