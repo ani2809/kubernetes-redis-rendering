@@ -33,18 +33,17 @@ endpoint, and `/readyz` reports whether Redis is connected.
 GitHub Actions runs app tests, parses the Kubernetes YAML, and builds the image
 on pull requests. Pushes to `main` publish `latest`, `main`, and a commit-SHA
 tag to GitHub Container Registry (GHCR). Pushing a semantic version tag such
-as `v1.0.0` also publishes the matching version tag, which the Kubernetes
-manifest uses.
+as `v1.0.1` also publishes the matching version tag, which the Kubernetes
+manifest uses. Published images include both AMD64 and ARM64 variants.
 
-The first GHCR package is private by default. To let Kubernetes pull it without
-credentials, open the package's settings on GitHub and change its visibility to
-public. For private images, configure an `imagePullSecret` instead.
+The GHCR package is public, so Kubernetes can pull it without credentials. If
+you make it private, configure an `imagePullSecret` before deploying.
 
 To publish a release image after merging changes:
 
 ```sh
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 Update the image tag in `k8s-manifests.yaml` to the new version before

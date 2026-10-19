@@ -56,7 +56,7 @@ test('health endpoint is live and readiness follows Redis state', async () => {
 });
 
 test('returns an internal server error when Redis fails', async (t) => {
-  t.mock.method(console, 'error');
+  t.mock.method(console, 'error', () => {});
   t.mock.method(redisClient, 'get', async () => {
     throw new Error('Redis unavailable');
   });
