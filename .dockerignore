@@ -1,0 +1,6 @@
+.git
+.github
+README.md
+k8s-manifests.yaml
+app/node_modules
+app/server.test.js

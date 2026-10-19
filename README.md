@@ -1,9 +1,69 @@
 # Kubernetes Redis Rendering
 
-Kubernetes manifest for a demo web app that caches rendered content in Redis.
+A small Express app that caches rendered content in Redis and runs on
+Kubernetes.
 
-Apply the resources with:
+## Build and run locally
+
+The app uses Node.js 22 and exact dependency versions recorded in
+`app/package-lock.json`.
+
+```sh
+docker build -t kubernetes-redis-rendering:local .
+```
+
+For a local Kubernetes cluster, make the image available to the cluster (for
+Docker Desktop, building it with the Docker daemon Kubernetes uses is usually
+enough), then set the web app image in `k8s-manifests.yaml` to
+`kubernetes-redis-rendering:local`. Apply and check the workloads:
 
 ```sh
 kubectl apply -f k8s-manifests.yaml
+kubectl rollout status deployment/redis -n cache-demo
+kubectl rollout status deployment/web-app -n cache-demo
+kubectl port-forward service/web-app-service 3000:3000 -n cache-demo
+```
+
+Open <http://localhost:3000>. The first request is a cache miss; subsequent
+requests within the 30-second TTL are cache hits. `/healthz` is the liveness
+endpoint, and `/readyz` reports whether Redis is connected.
+
+## Container images
+
+GitHub Actions runs app tests, parses the Kubernetes YAML, and builds the image
+on pull requests. Pushes to `main` publish `latest`, `main`, and a commit-SHA
+tag to GitHub Container Registry (GHCR). Pushing a semantic version tag such
+as `v1.0.0` also publishes the matching version tag, which the Kubernetes
+manifest uses.
+
+The first GHCR package is private by default. To let Kubernetes pull it without
+credentials, open the package's settings on GitHub and change its visibility to
+public. For private images, configure an `imagePullSecret` instead.
+
+To publish a release image after merging changes:
+
+```sh
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+Update the image tag in `k8s-manifests.yaml` to the new version before
+deploying.
+
+## Cache and deployment notes
+
+Redis is deliberately configured as an ephemeral, in-memory cache: restarting
+the Redis pod clears cached data. It has no external service exposure or
+authentication; use network policies and Redis authentication before exposing
+Redis beyond this demo namespace.
+
+The app and Redis containers run as non-root users, drop Linux capabilities,
+use read-only root filesystems, and define resource requests/limits and
+Kubernetes probes. Set `CACHE_TTL_SECONDS` to a positive integer to change the
+cache lifetime.
+
+Remove the demo resources with:
+
+```sh
+kubectl delete -f k8s-manifests.yaml
 ```
